@@ -1,0 +1,47 @@
+from flask import Flask
+from flask_sqlalchemy import SQLAlchemy
+
+app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///pizzeria.db'
+db = SQLAlchemy(app)
+
+# Проміжна таблиця для зв'язку багато-до-багатьох
+order_items = db.Table('order_items',
+    db.Column('order_id', db.Integer, db.ForeignKey('order.id')),
+    db.Column('menu_item_id', db.Integer, db.ForeignKey('menu_item.id'))
+)
+
+class Customer(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    phone_number = db.Column(db.String(15))
+    orders = db.relationship('Order', backref='customer', lazy=True)
+
+class MenuItem(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    price = db.Column(db.Numeric(10, 2), nullable=False)
+
+class Order(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey('customer.id'))
+    total_price = db.Column(db.Numeric(10, 2), default=0)
+    items = db.relationship('MenuItem', secondary=order_items, backref='orders')
+
+# Функція для додавання нового клієнта
+def add_customer(name, phone):
+    new_customer = Customer(name=name, phone_number=phone)
+    db.session.add(new_customer)
+    db.session.commit()
+
+# Функція для створення нового замовлення з підрахунком вартості
+def create_order(customer_id, menu_item_ids):
+    items = MenuItem.query.filter(MenuItem.id.in_(menu_item_ids)).all()
+    total = sum(item.price for item in items)
+    new_order = Order(customer_id=customer_id, total_price=total, items=items)
+    db.session.add(new_order)
+    db.session.commit()
+
+# Запит, який виводить усі замовлення конкретного клієнта
+def get_customer_orders(customer_id):
+    return Order.query.filter_by(customer_id=customer_id).all()
